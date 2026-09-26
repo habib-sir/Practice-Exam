@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Study Master — বাংলাদেশ সরকারি চাকরির লিখিত পরীক্ষা প্রস্তুতি</title>
+  <!-- Google Fonts: Hind Siliguri + Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;500;600;700&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="font-medium">
+
+  <canvas id="confetti-canvas"></canvas>
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- App Main Structure -->
+  <div class="app-container">
+    
+    <!-- Desktop Sidebar -->
+    <aside class="app-sidebar">
+      <div class="brand-header">
+        <div class="brand-logo">🎓</div>
+        <div class="brand-info">
+          <h1>Study Master</h1>
+          <p>লিখিত পরীক্ষা প্রস্তুতি (১৩-২০ গ্রেড)</p>
+        </div>
+      </div>
+      <nav class="sidebar-nav">
+        <button class="nav-link active" data-section="dashboard">
+          <span class="nav-icon">🏠</span>
+          <span>হোম (Dashboard)</span>
+        </button>
+        <button class="nav-link" data-section="routine">
+          <span class="nav-icon">📅</span>
+          <span>রুটিন (Planner)</span>
+        </button>
+        <button class="nav-link" data-section="exam">
+          <span class="nav-icon">📝</span>
+          <span>পরীক্ষা (Exam Module)</span>
+        </button>
+        <button class="nav-link" data-section="analytics">
+          <span class="nav-icon">📊</span>
+          <span>ফলাফল (Analytics)</span>
+        </button>
+        <button class="nav-link" data-section="coaching">
+          <span class="nav-icon">🎓</span>
+          <span>কোচিং (Coaching)</span>
+        </button>
+        <button class="nav-link" data-section="circulars">
+          <span class="nav-icon">📰</span>
+          <span>সার্কুলার (Circulars)</span>
+        </button>
+        <button class="nav-link" data-section="settings">
+          <span class="nav-icon">⚙️</span>
+          <span>সেটিংস (Settings)</span>
+        </button>
+      </nav>
+      <div style="padding-top: 14px; border-top: 1px solid var(--border);">
+        <button class="btn btn-outline btn-sm" style="width: 100%;" onclick="openModal('modal-pomodoro')">⏱️ পোমোডোরো টাইমার</button>
+      </div>
+    </aside>
+
+    <!-- App Main Screen Content -->
+    <main class="app-main">
+      <!-- Gradient Header -->
+      <header class="app-header">
+        <div class="header-left">
+          <div class="brand-logo" style="width: 36px; height: 36px; font-size: 18px;">✍️</div>
+          <div class="header-title-box">
+            <h2>Study Master BD</h2>
+            <p>অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক প্রস্তুতি</p>
+          </div>
+        </div>
+        <div class="header-actions">
+          <button class="btn-icon-pill" onclick="openModal('modal-pomodoro')">
+            <span>⏱️</span>
+            <span id="header-pomo-status">২৫:০০</span>
+          </button>
+          <button class="btn-icon-pill" onclick="openModal('modal-quick-note')">
+            <span>➕ নোট</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- SECTION 1: DASHBOARD -->
+      <section id="section-dashboard" class="page-section active">
+        <!-- Hero Overview Card -->
+        <div class="hero-card">
+          <div class="hero-content">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+              <span class="hero-date-badge" id="dash-date-text">শনিবার, ২৬ সেপ্টেম্বর ২০২৬</span>
+              <div style="display: flex; gap: 8px;">
+                <span class="hero-date-badge" id="dash-streak-badge" style="background: rgba(255, 152, 0, 0.35); font-weight: 700;">টানা ১ দিন পড়েছেন 🔥</span>
+                <span class="hero-date-badge" id="dash-points-badge" style="background: rgba(76, 175, 80, 0.35);">পয়েন্ট: ১২০ 🌟</span>
+              </div>
+            </div>
+
+            <div class="hero-stats-row">
+              <div class="progress-ring-box">
+                <div class="progress-ring">
+                  <svg width="76" height="76">
+                    <circle class="progress-ring-circle-bg" stroke-width="6" fill="transparent" r="32" cx="38" cy="38" />
+                    <circle id="dash-progress-circle" class="progress-ring-circle" stroke-width="6" fill="transparent" r="32" cx="38" cy="38" />
+                  </svg>
+                  <div id="dash-progress-text" class="progress-ring-text">০%</div>
+                </div>
+                <div>
+                  <div style="font-size: 15px; font-weight: 700;">আজকের পড়ার অগ্রগতি</div>
+                  <div style="font-size: 12px; opacity: 0.85;">নিয়মিত সম্পন্ন করুন ও সাফল্য পান</div>
+                </div>
+              </div>
+
+              <!-- Flip Countdown Widget -->
+              <div class="countdown-box">
+                <div class="countdown-digits" id="dash-countdown-days">৩০</div>
+                <div class="countdown-label">লিখিত পরীক্ষার বাকি দিন</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Motivational Quote -->
+        <div class="quote-box">
+          <span style="font-size: 22px;">💡</span>
+          <div id="dash-quote-text" style="font-size: 13.5px; font-weight: 500;">সাফল্য একদিনে আসে না, প্রতিদিনের পরিশ্রমই সাফল্য।</div>
+        </div>
+
+        <!-- Revision Alert Banner (if any) -->
+        <div id="dash-revision-box" style="display: none; margin-bottom: 16px;"></div>
+
+        <!-- Quick Stats (4 cards) -->
+        <div class="grid-4" style="margin-bottom: 20px;">
+          <div class="stat-card">
+            <div class="stat-icon" style="background: var(--primary-subtle); color: var(--primary);">📝</div>
+            <div class="stat-info">
+              <h4>মোট পরীক্ষা</h4>
+              <p id="stat-total-exams">০ টি</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background: var(--accent-light); color: var(--accent);">📈</div>
+            <div class="stat-info">
+              <h4>গড় নম্বর</h4>
+              <p id="stat-avg-score">০%</p>
+            </div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-icon" style="background: var(--success-subtle); color: var(--success);">💪</div>
+            <div class="stat-info">
+              <h4>শক্তিশালী বিষয়</h4>
+              <p id="stat-strong-sub" style="font-size: 15px;">বাংলা</p>
+            </div>
+          </div>
+          <div class="stat-card weak-highlight">
+            <div class="stat-icon" style="background: var(--danger-subtle); color: var(--danger);">⚠️</div>
+            <div class="stat-info">
+              <h4>দুর্বল বিষয়</h4>
+              <p id="stat-weak-sub" style="font-size: 15px; color: var(--danger);">গণিত</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Today's Schedule -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🕒 আজকের পড়ার সময়সূচি</div>
+              <button class="btn btn-outline btn-sm" onclick="navigateTo('routine')">রুটিন দেখুন</button>
+            </div>
+            <div id="dash-schedule-list"></div>
+          </div>
+
+          <!-- Mistake Diary Highlight -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📖 ভুলের ডায়েরি (Mistake Log)</div>
+              <button class="btn btn-outline btn-sm" onclick="navigateTo('analytics')">বিশ্লেষণ</button>
+            </div>
+            <div id="dash-mistake-box"></div>
+          </div>
+        </div>
+
+        <!-- Formula Sheet Accordion (Cheat Sheet) -->
+        <div class="card" style="margin-top: 10px;">
+          <div class="card-header">
+            <div class="card-title">📚 কুইক চিটশিট ও সূত্রাবলি (Formula Sheets)</div>
+          </div>
+          <div id="formula-accordion-container"></div>
+        </div>
+
+        <!-- Official Syllabus Accordion -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 অফিস সহকারী লিখিত পরীক্ষার অফিসিয়াল সিলেবাস ও ট্র্যাকার</div>
+          </div>
+          <div id="syllabus-accordion-container"></div>
+        </div>
+      </section>
+
+      <!-- SECTION 2: ROUTINE (Study Planner) -->
+      <section id="section-routine" class="page-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <h3 style="font-size: 20px; font-weight: 700;">📅 লিখিত পরীক্ষার স্টাডি প্ল্যানার</h3>
+            <p style="font-size: 13px; color: var(--muted);">বিষয় ও টপিক ব্যবস্থাপনা এবং সাপ্তাহিক রুটিন জেনারেটর</p>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-accent btn-sm" onclick="generateWeeklyRoutine()">⚡ অটো রুটিন তৈরি করুন</button>
+            <button class="btn btn-outline btn-sm" onclick="window.print()">🖨️ প্রিন্ট / সেভ</button>
+          </div>
+        </div>
+
+        <!-- Daily Priority Checklist -->
+        <div class="card" style="border-left: 4px solid var(--accent); margin-bottom: 20px;">
+          <div class="card-header">
+            <div class="card-title">✅ আজকের অগ্রাধিকার চেকলিস্ট (Daily Checklist)</div>
+          </div>
+          <div id="daily-checklist-container"></div>
+        </div>
+
+        <!-- Auto Routine Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🗓️ ৭ দিনের সাপ্তাহিক স্টাডি রুটিন</div>
+          </div>
+          <div class="routine-table-wrapper">
+            <table class="routine-table">
+              <thead>
+                <tr>
+                  <th>বার</th>
+                  <th>সকালের সেশন (০৬:০০ - ০৯:০০)</th>
+                  <th>সন্ধ্যার সেশন (১৮:০০ - ২১:০০)</th>
+                  <th>মডেল টেস্ট ও অনুশীলন</th>
+                </tr>
+              </thead>
+              <tbody id="routine-table-body">
+                <tr><td colspan="4" style="text-align: center; color: var(--muted); padding: 18px;">"অটো রুটিন তৈরি করুন" বাটনে ক্লিক করে স্বয়ংক্রিয় রুটিন তৈরি করুন।</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Subject & Topic Manager -->
+        <div style="margin-top: 24px; margin-bottom: 12px;">
+          <h4 style="font-size: 17px; font-weight: 700;">📖 বিষয়ভিত্তিক টপিক ও প্রায়োরিটি ম্যানেজার</h4>
+        </div>
+        <div class="grid-2" id="routine-subjects-container"></div>
+      </section>
+
+      <!-- SECTION 3: EXAM MODULE (পরীক্ষা) -->
+      <section id="section-exam" class="page-section">
+        <!-- Step 1: Exam Setup -->
+        <div id="exam-setup-container">
+          <div class="card" id="exam-setup-card">
+            <div class="card-header">
+              <div class="card-title">📝 লিখিত পরীক্ষা সেটআপ (Gemini AI & Question Bank)</div>
+            </div>
+
+            <div class="grid-2">
+              <div class="form-group">
+                <label class="form-label">বিষয় নির্বাচন করুন:</label>
+                <select id="exam-setup-subject" class="form-control">
+                  <option value="বাংলা">বাংলা (১০০ নম্বর — লিখিত)</option>
+                  <option value="ইংরেজি">ইংরেজি (১০০ নম্বর — লিখিত)</option>
+                  <option value="গণিত">গণিত (১০০ নম্বর — লিখিত পূর্ণ সমাধান)</option>
+                  <option value="সাধারণ জ্ঞান">সাধারণ জ্ঞান (১০০ নম্বর — লিখিত)</option>
+                  <option value="কম্পিউটার">কম্পিউটার ও আইসিটি (১০০ নম্বর — লিখিত)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">পরীক্ষার সময়সীমা (মিনিট):</label>
+                <input type="number" id="exam-setup-duration" class="form-control" value="60" min="10" max="180">
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label">পরীক্ষার ম্যাটেরিয়াল বা বইয়ের অংশ (ঐচ্ছিক — Gemini AI নির্দিষ্ট প্রশ্ন তৈরি করবে):</label>
+              <textarea id="exam-setup-material" class="form-control" placeholder="এখানে পিডিএফ বা বই থেকে টেক্সট পেস্ট করতে পারেন। খালি রাখলে সরকারি সিলেবাস থেকে প্রশ্ন হবে..."></textarea>
+            </div>
+
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-lg" onclick="generateExamWithGemini()">✨ প্রশ্ন তৈরি করুন (Gemini AI)</button>
+              <button class="btn btn-accent btn-lg" onclick="startExamFromBank(document.getElementById('offline-bank-select').value)">
+                📂 অফলাইন প্রশ্ন ব্যাংক থেকে শুরু
+              </button>
+            </div>
+
+            <div style="margin-top: 14px;">
+              <label class="form-label">অফলাইন মডেল প্রশ্ন নির্বাচন করুন:</label>
+              <select id="offline-bank-select" class="form-control"></select>
+            </div>
+          </div>
+
+          <!-- Skeleton Loader -->
+          <div id="exam-skeleton-loader" style="display: none;">
+            <div class="card">
+              <div class="skeleton skeleton-title"></div>
+              <div class="skeleton skeleton-text"></div>
+              <div class="skeleton skeleton-text" style="width: 80%;"></div>
+              <div class="skeleton skeleton-text" style="width: 90%;"></div>
+              <div style="text-align: center; color: var(--primary); font-weight: 700; margin-top: 16px;">
+                🤖 Gemini AI সরকারি চাকরির লিখিত পরীক্ষার প্রশ্ন তৈরি করছে... অনুগ্রহ করে অপেক্ষা করুন।
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Exam Hall (Fullscreen interface) -->
+        <div id="exam-hall-container" style="display: none;">
+          <div class="card" style="background: linear-gradient(135deg, #1a237e, #303f9f); color: #fff; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 id="hall-exam-title" style="font-size: 19px; font-weight: 700;">লিখিত পরীক্ষা</h3>
+                <p id="hall-exam-marks" style="font-size: 13px; opacity: 0.9;">পূর্ণমান: ১০০</p>
+              </div>
+              <div style="background: #fff; padding: 6px 18px; border-radius: 9999px;">
+                <span style="font-size: 12px; color: var(--muted); font-weight: 600;">সময় বাকি:</span>
+                <span id="hall-timer" style="font-size: 20px; font-weight: 800; color: #1a237e; margin-left: 6px;">৬০:০০</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Questions List -->
+          <div id="hall-questions-list"></div>
+
+          <div style="text-align: center; margin-top: 24px;">
+            <button class="btn btn-danger btn-lg" onclick="confirmFinishExam()">🛑 পরীক্ষা শেষ করুন ও মূল্যায়ন দেখুন</button>
+          </div>
+        </div>
+
+        <!-- Step 3: Exam Evaluation -->
+        <div id="exam-eval-container" style="display: none;">
+          <div class="card" style="border-left: 5px solid var(--accent);">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+              <div>
+                <h3 style="font-size: 18px; font-weight: 700;">📝 উত্তরপত্র মূল্যায়ন ও নম্বর প্রদান</h3>
+                <p style="font-size: 13px; color: var(--muted);">মডেল উত্তরের সাথে মিলিয়ে প্রতিটি প্রশ্নের প্রাপ্ত নম্বর দিন</p>
+              </div>
+              <div style="background: var(--primary-subtle); padding: 8px 16px; border-radius: 8px;">
+                <span style="font-size: 13px; font-weight: 600;">মোট প্রাপ্ত নম্বর:</span>
+                <span id="eval-total-display" style="font-size: 18px; font-weight: 800; color: var(--primary); margin-left: 6px;">০ / ১০০</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="eval-questions-list"></div>
+
+          <div style="text-align: center; margin-top: 24px;">
+            <button class="btn btn-primary btn-lg" onclick="saveExamResult()">💾 ফলাফল সেভ করুন ও বিশ্লেষণে যান</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 4: ANALYTICS (ফলাফল ও Analytics) -->
+      <section id="section-analytics" class="page-section">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 8px;">
+          <div>
+            <h3 style="font-size: 20px; font-weight: 700;">📊 ফলাফল ও পারফরম্যান্স বিশ্লেষণ</h3>
+            <p style="font-size: 13px; color: var(--muted);">বিষয়ভিত্তিক দুর্বলতা চিহ্নিতকরণ ও প্রগ্রেস ট্র্যাকিং</p>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="exportExamsToCSV()">📥 এক্সপোর্ট CSV</button>
+        </div>
+
+        <!-- Pure CSS Bar Chart -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📈 বিষয়ভিত্তিক গড় নম্বর (Pure CSS Bar Chart)</div>
+          </div>
+          <div class="css-bar-chart" id="analytics-bar-chart"></div>
+        </div>
+
+        <!-- Heatmap -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🔥 পরীক্ষার নিয়মিততা হিটম্যাপ (Heatmap Grid)</div>
+          </div>
+          <p style="font-size: 12px; color: var(--muted);">বিগত ৪ সপ্তাহের পরীক্ষার ধারাবাহিকতা</p>
+          <div class="heatmap-container" id="analytics-heatmap"></div>
+        </div>
+
+        <!-- Exam History Table -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">📋 পরীক্ষার সম্পূর্ণ ইতিহাস</div>
+          </div>
+          <div class="routine-table-wrapper">
+            <table class="routine-table">
+              <thead>
+                <tr>
+                  <th>তারিখ</th>
+                  <th>বিষয়</th>
+                  <th>প্রাপ্ত নম্বর</th>
+                  <th>পূর্ণমান</th>
+                  <th>শতাংশ</th>
+                  <th>মন্তব্য</th>
+                </tr>
+              </thead>
+              <tbody id="exam-history-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 5: COACHING TRACKER (কোচিং) -->
+      <section id="section-coaching" class="page-section">
+        <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">🎓 কোচিং ট্র্যাকার ও স্পেসড রিপিটেশন</h3>
+        <p style="font-size: 13px; color: var(--muted); margin-bottom: 18px;">Ebbinghaus Forgetting Curve অনুযায়ী ১, ৩, ৭, ১৪ ও ৩০ দিনে রিভিশন অ্যালার্ট</p>
+
+        <!-- New Coaching Entry Form -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">➕ নতুন কোচিং ক্লাসের নোট যোগ করুন</div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">বিষয়:</label>
+              <select id="coach-input-subject" class="form-control">
+                <option value="বাংলা">বাংলা</option>
+                <option value="ইংরেজি">ইংরেজি</option>
+                <option value="গণিত">গণিত</option>
+                <option value="সাধারণ জ্ঞান">সাধারণ জ্ঞান</option>
+                <option value="কম্পিউটার">কম্পিউটার</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">টপিকের নাম:</label>
+              <input type="text" id="coach-input-topic" class="form-control" placeholder="যেমন: শতকরা ও লাভ-ক্ষতির শর্টকাট সূত্র">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">শিক্ষকের গুরুত্বপূর্ণ নোট:</label>
+              <input type="text" id="coach-input-teacher-note" class="form-control" placeholder="স্যার যে নিয়মগুলো বেশি গুরুত্ব দিয়েছেন...">
+            </div>
+            <div class="form-group">
+              <label class="form-label">নিজের বোঝার সুবিধার্থে নোট:</label>
+              <input type="text" id="coach-input-my-note" class="form-control" placeholder="যে ভুলগুলো আমার হতে পারে...">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="addCoachingEntry()">💾 কোচিং ক্লাস সেভ করুন ও রিভিশন শিডিউল তৈরি করুন</button>
+        </div>
+
+        <div class="grid-2">
+          <!-- Revision Timeline -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🔔 স্পেসড রিপিটেশন শিডিউল (Pending Revisions)</div>
+            </div>
+            <div id="coaching-revisions-list"></div>
+          </div>
+
+          <!-- Class Logs List -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📚 বিগত ক্লাসের নোটসমূহ</div>
+            </div>
+            <div id="coaching-logs-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 6: CIRCULARS (সার্কুলার মনিটর) -->
+      <section id="section-circulars" class="page-section">
+        <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">📰 সরকারি চাকরির সার্কুলার মনিটর</h3>
+        <p style="font-size: 13px; color: var(--muted); margin-bottom: 18px;">অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক পদের সার্কুলার ও ডেডলাইন ট্র্যাকার</p>
+
+        <!-- Quick Search Links -->
+        <div class="card" style="background: var(--primary-subtle);">
+          <div style="font-size: 14px; font-weight: 700; margin-bottom: 8px;">🔍 এক ক্লিকে সরাসরি সার্চ করুন:</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <a href="https://www.google.com/search?q=অফিস+সহকারী+কাম+কম্পিউটার+মুদ্রাক্ষরিক+নিয়োগ+বিজ্ঞপ্তি" target="_blank" class="btn btn-outline btn-sm" style="background: #fff;">🌐 Google সার্কুলার সার্চ</a>
+            <a href="https://jobs.bdjobs.com" target="_blank" class="btn btn-outline btn-sm" style="background: #fff;">💼 BDJobs সরকারি চাকরি</a>
+            <a href="https://bangladesh.gov.bd" target="_blank" class="btn btn-outline btn-sm" style="background: #fff;">🏛️ জাতীয় তথ্য বাতায়ন</a>
+          </div>
+        </div>
+
+        <!-- Add Custom Circular -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">➕ নতুন সার্কুলার রিমাইন্ডার যোগ করুন</div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">পদের নাম:</label>
+              <input type="text" id="circ-input-title" class="form-control" value="অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক">
+            </div>
+            <div class="form-group">
+              <label class="form-label">প্রতিষ্ঠান / মন্ত্রণালয়:</label>
+              <input type="text" id="circ-input-org" class="form-control" placeholder="যেমন: স্বাস্থ্য অধিদপ্তর / খাদ্য অধিদপ্তর">
+            </div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">আবেদনের শেষ তারিখ:</label>
+              <input type="date" id="circ-input-deadline" class="form-control">
+            </div>
+            <div class="form-group">
+              <label class="form-label">সার্কুলার লিংক:</label>
+              <input type="url" id="circ-input-link" class="form-control" placeholder="https://...">
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="addCustomCircular()">📌 সার্কুলার সেভ করুন</button>
+        </div>
+
+        <div class="grid-2">
+          <!-- Circular Sites -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🌐 নিয়মিত মনিটর করা ওয়েবসাইটসমূহ</div>
+            </div>
+            <div id="circular-sites-list"></div>
+          </div>
+
+          <!-- Saved Circulars -->
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📑 আমার ট্র্যাক করা সার্কুলারসমূহ</div>
+            </div>
+            <div id="custom-circulars-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECTION 7: SETTINGS (সেটিংস) -->
+      <section id="section-settings" class="page-section">
+        <h3 style="font-size: 20px; font-weight: 700; margin-bottom: 4px;">⚙️ অ্যাপ সেটিংস ও প্রোফাইল</h3>
+        <p style="font-size: 13px; color: var(--muted); margin-bottom: 18px;">Gemini API, ডার্ক মোড ও ডেটা ব্যাকআপ কনফিগারেশন</p>
+
+        <!-- API Configuration -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🤖 Gemini AI কনফিগারেশন</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gemini API Key:</label>
+            <div style="display: flex; gap: 8px;">
+              <input type="password" id="setting-api-key-input" class="form-control" placeholder="AI Studio থেকে প্রাপ্ত API Key দিন">
+              <button class="btn btn-outline" onclick="const f = document.getElementById('setting-api-key-input'); f.type = f.type==='password'?'text':'password';">👁️</button>
+              <button class="btn btn-accent" onclick="testApiKey()">টেস্ট করুন</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Profile Settings -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">👤 প্রোফাইল ও লক্ষ্য</div>
+          </div>
+          <div class="grid-2">
+            <div class="form-group">
+              <label class="form-label">আপনার নাম:</label>
+              <input type="text" id="setting-name-input" class="form-control" value="পরীক্ষার্থী">
+            </div>
+            <div class="form-group">
+              <label class="form-label">টার্গেট পোস্ট:</label>
+              <input type="text" id="setting-post-input" class="form-control" value="অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক">
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">টার্গেট পরীক্ষার সম্ভাব্য তারিখ:</label>
+            <input type="date" id="setting-date-input" class="form-control">
+          </div>
+        </div>
+
+        <!-- App Display & Data Settings -->
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🎨 ডিসপ্লে ও থিম</div>
+          </div>
+          <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0;">
+            <span>ডার্ক মোড (Dark Mode)</span>
+            <input type="checkbox" id="setting-darkmode-toggle" style="width: 20px; height: 20px; cursor: pointer;">
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+          <button class="btn btn-primary btn-lg" onclick="saveSettings()">💾 সেটিংস সংরক্ষণ করুন</button>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="mobile-bottom-nav">
+      <button class="mobile-nav-btn active" data-section="dashboard">
+        <span class="icon">🏠</span>
+        <span>হোম</span>
+      </button>
+      <button class="mobile-nav-btn" data-section="routine">
+        <span class="icon">📅</span>
+        <span>রুটিন</span>
+      </button>
+      <button class="mobile-nav-btn" data-section="exam">
+        <span class="icon">📝</span>
+        <span>পরীক্ষা</span>
+      </button>
+      <button class="mobile-nav-btn" data-section="analytics">
+        <span class="icon">📊</span>
+        <span>ফলাফল</span>
+      </button>
+      <button class="mobile-nav-btn" data-section="coaching">
+        <span class="icon">🎓</span>
+        <span>কোচিং</span>
+      </button>
+      <button class="mobile-nav-btn" data-section="circulars">
+        <span class="icon">📰</span>
+        <span>সার্কুলার</span>
+      </button>
+      <button class="mobile-nav-btn" data-section="settings">
+        <span class="icon">⚙️</span>
+        <span>সেটিংস</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- Floating Actions (Pomodoro & Quick Note) -->
+  <div class="floating-action-group">
+    <button class="fab" onclick="openModal('modal-pomodoro')" title="পোমোডোরো স্টাডি টাইমার">⏱️</button>
+    <button class="fab fab-primary" onclick="openModal('modal-quick-note')" title="দ্রুত নোট">+</button>
+  </div>
+
+  <!-- MODAL: Pomodoro Timer -->
+  <div id="modal-pomodoro" class="modal-overlay">
+    <div class="modal-card" style="text-align: center;">
+      <div class="modal-header">
+        <h3 class="modal-title">⏱️ পোমোডোরো স্টাডি টাইমার</h3>
+        <button class="btn-close" onclick="closeModal('modal-pomodoro')">✕</button>
+      </div>
+      <p style="font-size: 13px; color: var(--muted); margin-bottom: 20px;">২৫ মিনিট গভীর মনোযোগ দিয়ে পড়ুন এবং ৫ মিনিট বিরতি নিন।</p>
+      
+      <div style="font-size: 48px; font-weight: 800; color: var(--primary); letter-spacing: 2px; margin-bottom: 20px;" id="pomo-display">
+        ২৫:০০
+      </div>
+
+      <div style="display: flex; justify-content: center; gap: 12px;">
+        <button class="btn btn-primary btn-lg" id="pomo-toggle-btn" onclick="togglePomodoro()">শুরু করুন ▶</button>
+        <button class="btn btn-outline" onclick="STATE.pomodoro.timeLeft = 25*60; updatePomodoroDisplay();">রিসেট ↺</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Quick Note -->
+  <div id="modal-quick-note" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">📝 দ্রুত পড়ার নোট (Quick Note)</h3>
+        <button class="btn-close" onclick="closeModal('modal-quick-note')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">নোটের শিরোনাম:</label>
+        <input type="text" id="note-title-input" class="form-control" placeholder="যেমন: সন্ধি বিচ্ছেদের বিশেষ ব্যতিক্রম">
+      </div>
+      <div class="form-group">
+        <label class="form-label">বিষয়:</label>
+        <select id="note-subject-input" class="form-control">
+          <option value="বাংলা">বাংলা</option>
+          <option value="ইংরেজি">ইংরেজি</option>
+          <option value="গণিত">গণিত</option>
+          <option value="সাধারণ জ্ঞান">সাধারণ জ্ঞান</option>
+          <option value="কম্পিউটার">কম্পিউটার</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">বিষয়বস্তু:</label>
+        <textarea id="note-content-input" class="form-control" placeholder="গুরুত্বপূর্ণ তথ্য বা সূত্র লিখুন..."></textarea>
+      </div>
+      <button class="btn btn-primary" style="width: 100%;" onclick="saveQuickNote()">সেভ করুন</button>
+    </div>
+  </div>
+
+  <!-- MODAL: Confirm Dialog -->
+  <div id="modal-confirm" class="modal-overlay">
+    <div class="modal-card" style="max-width: 400px; text-align: center;">
+      <div style="font-size: 36px; margin-bottom: 10px;">⚠️</div>
+      <h3 style="font-size: 17px; font-weight: 700; margin-bottom: 12px;" id="confirm-modal-msg">আপনি কি নিশ্চিত?</h3>
+      <div style="display: flex; justify-content: center; gap: 12px; margin-top: 18px;">
+        <button class="btn btn-outline" onclick="closeModal('modal-confirm')">বাতিল</button>
+        <button class="btn btn-danger" onclick="executeConfirm()">হ্যাঁ, নিশ্চিত</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

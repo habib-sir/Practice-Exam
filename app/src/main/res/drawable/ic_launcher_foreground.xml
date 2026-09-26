@@ -1,0 +1,18 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Graduation Cap / Mortarboard (Centered within 66dp safe circle: x 21-87, y 21-87) -->
+    <path
+        android:fillColor="#00E5FF"
+        android:pathData="M54,29 L28,42 L54,55 L74,45 L74,56 L78,56 L78,43 L80,42 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M34,47.5 L34,58.5 C34,65 43,70 54,70 C65,70 74,65 74,58.5 L74,47.5 L54,57.5 Z" />
+    <!-- Open Book Base at bottom -->
+    <path
+        android:fillColor="#E0E7FF"
+        android:pathData="M30,73 C37,70 47,70 54,74 C61,70 71,70 78,73 L78,79 C71,76 61,76 54,80 C47,76 37,76 30,79 Z" />
+</vector>
+

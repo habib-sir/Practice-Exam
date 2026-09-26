@@ -1,0 +1,6 @@
+{
+  "name": "Study Master",
+  "description": "বাংলাদেশ সরকারি চাকরির লিখিত পরীক্ষার পূর্ণাঙ্গ প্রস্তুতি প্ল্যাটফর্ম — অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক (১৩-২০ গ্রেড)",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

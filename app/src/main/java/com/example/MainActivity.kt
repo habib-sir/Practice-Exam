@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
         }
         setContent {
             AppScreen(
+                activity = this,
                 onWebViewCreated = { webView = it },
                 vibrateDevice = { vibrateDevice() },
                 playBeepSound = { playBeepSound() }
@@ -99,7 +100,8 @@ class WebAppInterface(
     fun getBuildConfigApiKey(): String {
         return try {
             val field = BuildConfig::class.java.getField("GEMINI_API_KEY")
-            field.get(null) as? String ?: ""
+            val key = field.get(null) as? String ?: ""
+            if (key == "MY_GEMINI_API_KEY") "" else key
         } catch (_: Exception) {
             ""
         }
@@ -109,6 +111,7 @@ class WebAppInterface(
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun AppScreen(
+    activity: MainActivity,
     onWebViewCreated: (WebView) -> Unit,
     vibrateDevice: () -> Unit,
     playBeepSound: () -> Unit
@@ -134,14 +137,21 @@ fun AppScreen(
                 settings.apply {
                     javaScriptEnabled = true
                     domStorageEnabled = true
-                    databaseEnabled = true
                     allowFileAccess = true
                     mediaPlaybackRequiresUserGesture = false
                     cacheMode = WebSettings.LOAD_DEFAULT
                     useWideViewPort = true
                     loadWithOverviewMode = true
                 }
-                webChromeClient = WebChromeClient()
+                webChromeClient = object : WebChromeClient() {
+                    override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage?): Boolean {
+                        android.util.Log.d(
+                            "StudyMasterConsole",
+                            "[${consoleMessage?.messageLevel()}] ${consoleMessage?.message()} (${consoleMessage?.sourceId()}:${consoleMessage?.lineNumber()})"
+                        )
+                        return super.onConsoleMessage(consoleMessage)
+                    }
+                }
                 webViewClient = object : WebViewClient() {
                     override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                         url?.let {
@@ -159,9 +169,7 @@ fun AppScreen(
                         return false
                     }
                 }
-                if (context is MainActivity) {
-                    addJavascriptInterface(WebAppInterface(context, vibrateDevice, playBeepSound), "AndroidBridge")
-                }
+                addJavascriptInterface(WebAppInterface(activity, vibrateDevice, playBeepSound), "AndroidBridge")
                 loadUrl("file:///android_asset/index.html")
                 activeWebView = this
                 onWebViewCreated(this)

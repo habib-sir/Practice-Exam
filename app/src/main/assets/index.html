@@ -254,8 +254,9 @@
         <!-- Step 1: Exam Setup -->
         <div id="exam-setup-container">
           <div class="card" id="exam-setup-card">
-            <div class="card-header">
+            <div class="card-header" style="flex-wrap: wrap; gap: 8px;">
               <div class="card-title">📝 লিখিত পরীক্ষা সেটআপ (Gemini AI & Question Bank)</div>
+              <div id="exam-api-status-badge"></div>
             </div>
 
             <div class="grid-2">
@@ -302,7 +303,7 @@
               <div class="skeleton skeleton-text" style="width: 80%;"></div>
               <div class="skeleton skeleton-text" style="width: 90%;"></div>
               <div style="text-align: center; color: var(--primary); font-weight: 700; margin-top: 16px;">
-                🤖 Gemini AI সরকারি চাকরির লিখিত পরীক্ষার প্রশ্ন তৈরি করছে... অনুগ্রহ করে অপেক্ষা করুন।
+                <span id="exam-loader-status-msg">🤖 Gemini AI সরকারি চাকরির লিখিত পরীক্ষার প্রশ্ন তৈরি করছে... অনুগ্রহ করে অপেক্ষা করুন।</span>
               </div>
             </div>
           </div>

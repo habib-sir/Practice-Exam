@@ -17,10 +17,27 @@ const STATE = {
   streak: { count: 1, lastActive: '' },
   points: 120,
   apiKey: '',
-  model: 'gemini-1.5-flash',
+  model: 'gemini-3.5-flash',
+  useSearchGrounding: true,
   examSession: null,
   pomodoro: { timeLeft: 25 * 60, isRunning: false, mode: 'study', sessions: 0, timerId: null }
 };
+
+function getEffectiveApiKey() {
+  let key = (STATE.apiKey || '').trim();
+  if (!key) {
+    key = (localStorage.getItem('sma_api_key') || '').trim();
+  }
+  if (!key && window.AndroidBridge && window.AndroidBridge.getBuildConfigApiKey) {
+    try {
+      key = (window.AndroidBridge.getBuildConfigApiKey() || '').trim();
+    } catch (e) {
+      console.error('[StudyMaster] AndroidBridge getBuildConfigApiKey failed:', e);
+    }
+  }
+  if (key === 'MY_GEMINI_API_KEY') key = '';
+  return key;
+}
 
 // Initialize State
 function initApp() {
@@ -30,6 +47,7 @@ function initApp() {
   initPomodoro();
   checkStreak();
   checkOverdueRevisions();
+  updateExamKeyStatus();
 }
 
 function loadFromStorage() {
@@ -91,6 +109,7 @@ function navigateTo(sectionId) {
   // Refresh page-specific content
   if (sectionId === 'dashboard') renderDashboard();
   if (sectionId === 'routine') renderRoutineSection();
+  if (sectionId === 'exam') updateExamKeyStatus();
   if (sectionId === 'analytics') renderAnalytics();
   if (sectionId === 'coaching') renderCoaching();
   if (sectionId === 'circulars') renderCirculars();
@@ -355,105 +374,398 @@ function generateWeeklyRoutine() {
   showToast('📅 ৭ দিনের সাপ্তাহিক রুটিন তৈরি হয়েছে!', 'success');
 }
 
-// Exam Module
+// // Exam Module
 function startExamFromBank(qbId) {
+  console.log('[Gemini Exam] Starting exam from offline question bank with ID:', qbId);
   const exam = OFFLINE_QUESTION_BANK.find(q => q.id === qbId) || OFFLINE_QUESTION_BANK[0];
+  console.log('[Gemini Exam] Selected offline bank model test:', exam.exam_title);
   loadExamToHall(exam);
 }
 
-async function generateExamWithGemini() {
-  const subject = document.getElementById('exam-setup-subject').value;
-  const duration = parseInt(document.getElementById('exam-setup-duration').value) || 60;
-  const material = document.getElementById('exam-setup-material').value.trim();
+function sanitizeJsonString(str) {
+  if (!str) return '';
+  return str
+    .replace(/,\s*([}\]])/g, '$1') // remove trailing commas before } or ]
+    .replace(/\/\*[\s\S]*?\*\/|([^\\:]|^)\/\/.*$/gm, '$1'); // remove inline/block comments
+}
 
-  const apiKey = STATE.apiKey;
-  if (!apiKey) {
-    showToast('⚠️ অনুগ্রহ করে সেটিংস পেজে আপনার Gemini API Key দিন!', 'warning');
-    navigateTo('settings');
-    return;
+function extractExamJson(rawText) {
+  console.log('[extractExamJson] Initiating extraction. Raw text length:', rawText?.length);
+  if (!rawText || typeof rawText !== 'string') {
+    throw new Error('No text returned from Gemini API response parts.');
   }
 
-  // Show Skeleton Loader
-  document.getElementById('exam-setup-card').style.display = 'none';
-  document.getElementById('exam-skeleton-loader').style.display = 'block';
+  const cleaned = rawText.trim();
 
+  // Attempt 1: Direct JSON parse
+  try {
+    const directObj = JSON.parse(cleaned);
+    console.log('[extractExamJson] Attempt 1 (Direct JSON.parse) SUCCEEDED.');
+    return directObj;
+  } catch (err) {
+    console.log('[extractExamJson] Attempt 1 failed:', err.message);
+  }
+
+  // Attempt 2: Extract inside markdown code block ```json ... ``` or ``` ... ```
+  const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/gi;
+  let match;
+  let blockIndex = 0;
+  while ((match = codeBlockRegex.exec(cleaned)) !== null) {
+    blockIndex++;
+    if (match[1]) {
+      const blockContent = match[1].trim();
+      try {
+        const fenceObj = JSON.parse(blockContent);
+        console.log(`[extractExamJson] Attempt 2 (Code block #${blockIndex}) SUCCEEDED.`);
+        return fenceObj;
+      } catch (e) {
+        console.log(`[extractExamJson] Code block #${blockIndex} direct parse failed, trying sanitized parse...`);
+        try {
+          const sanitizedFence = JSON.parse(sanitizeJsonString(blockContent));
+          console.log(`[extractExamJson] Attempt 2 (Sanitized code block #${blockIndex}) SUCCEEDED.`);
+          return sanitizedFence;
+        } catch (e2) {
+          console.warn(`[extractExamJson] Code block #${blockIndex} sanitized parse failed:`, e2.message);
+        }
+      }
+    }
+  }
+
+  // Attempt 3: Substring between first '{' and last '}'
+  const firstBrace = cleaned.indexOf('{');
+  const lastBrace = cleaned.lastIndexOf('}');
+  if (firstBrace !== -1 && lastBrace > firstBrace) {
+    const candidateSub = cleaned.substring(firstBrace, lastBrace + 1);
+    try {
+      const subObj = JSON.parse(candidateSub);
+      console.log('[extractExamJson] Attempt 3 (Substring { ... }) SUCCEEDED.');
+      return subObj;
+    } catch (e) {
+      console.log('[extractExamJson] Attempt 3 direct parse failed, trying sanitized parse...');
+      try {
+        const sanitizedSub = JSON.parse(sanitizeJsonString(candidateSub));
+        console.log('[extractExamJson] Attempt 3 (Sanitized substring { ... }) SUCCEEDED.');
+        return sanitizedSub;
+      } catch (e2) {
+        console.warn('[extractExamJson] Attempt 3 sanitized parse failed:', e2.message);
+      }
+    }
+  }
+
+  // Attempt 4: Search for top-level array [ { ... } ]
+  const firstBracket = cleaned.indexOf('[');
+  const lastBracket = cleaned.lastIndexOf(']');
+  if (firstBracket !== -1 && lastBracket > firstBracket) {
+    const candidateArr = cleaned.substring(firstBracket, lastBracket + 1);
+    try {
+      const arrObj = JSON.parse(candidateArr);
+      if (Array.isArray(arrObj)) {
+        console.log('[extractExamJson] Attempt 4 (Direct Array [ ... ]) SUCCEEDED.');
+        return { questions: arrObj };
+      }
+    } catch (e) {
+      try {
+        const sanitizedArr = JSON.parse(sanitizeJsonString(candidateArr));
+        if (Array.isArray(sanitizedArr)) {
+          console.log('[extractExamJson] Attempt 4 (Sanitized Array [ ... ]) SUCCEEDED.');
+          return { questions: sanitizedArr };
+        }
+      } catch (_) {}
+    }
+  }
+
+  console.error('[extractExamJson] ALL PARSE ATTEMPTS FAILED. Sample of raw text:', cleaned.slice(0, 300));
+  throw new Error('Failed to parse a valid JSON structure from Gemini response.');
+}
+
+function normalizeExamData(raw, fallbackSubject, fallbackDuration) {
+  console.log('[normalizeExamData] Normalizing exam data. Top-level keys:', Object.keys(raw || {}));
+
+  // Handle case where root is wrapped or nested
+  let root = raw || {};
+  if (root.exam && typeof root.exam === 'object' && !Array.isArray(root.exam)) {
+    root = root.exam;
+  } else if (root.data && typeof root.data === 'object' && !Array.isArray(root.data)) {
+    root = root.data;
+  } else if (root.written_exam && typeof root.written_exam === 'object') {
+    root = root.written_exam;
+  }
+
+  const exam = {
+    exam_title: root.exam_title || root.title || `${fallbackSubject} — লিখিত পরীক্ষা (১৩-২০ গ্রেড)`,
+    subject: root.subject || fallbackSubject,
+    total_marks: parseInt(root.total_marks, 10) || 100,
+    duration_minutes: parseInt(root.duration_minutes, 10) || fallbackDuration || 60,
+    questions: [],
+    answer_key: []
+  };
+
+  // Find questions list
+  let rawQuestions = [];
+  if (Array.isArray(root.questions)) {
+    rawQuestions = root.questions;
+  } else if (Array.isArray(root.Questions)) {
+    rawQuestions = root.Questions;
+  } else if (Array.isArray(root.questions_list)) {
+    rawQuestions = root.questions_list;
+  } else if (Array.isArray(root)) {
+    rawQuestions = root;
+  } else {
+    // Search any property that is an array of objects
+    for (const key of Object.keys(root)) {
+      if (Array.isArray(root[key]) && root[key].length > 0 && typeof root[key][0] === 'object') {
+        rawQuestions = root[key];
+        console.log(`[normalizeExamData] Found candidate questions array under key: "${key}"`);
+        break;
+      }
+    }
+  }
+
+  console.log('[normalizeExamData] Raw questions array extracted. Length:', rawQuestions.length);
+
+  rawQuestions.forEach((q, idx) => {
+    exam.questions.push({
+      number: parseInt(q.number, 10) || (idx + 1),
+      type: q.type || q.category || 'লিখিত প্রশ্ন',
+      question: q.question || q.text || q.description || q.prompt || `প্রশ্ন বিবরণী ${idx + 1}`,
+      marks: parseInt(q.marks, 10) || parseInt(q.mark, 10) || parseInt(q.points, 10) || 20,
+      instruction: q.instruction || q.instructions || ''
+    });
+  });
+
+  // Find answer keys list
+  const rawKeyList = Array.isArray(root.answer_key) ? root.answer_key :
+                     (Array.isArray(root.AnswerKey) ? root.AnswerKey :
+                     (Array.isArray(root.answers) ? root.answers :
+                     (Array.isArray(root.model_answers) ? root.model_answers : [])));
+
+  rawKeyList.forEach((k, idx) => {
+    exam.answer_key.push({
+      number: parseInt(k.number, 10) || (idx + 1),
+      model_answer: k.model_answer || k.answer || k.solution || 'আদর্শ উত্তর পর্যালোচনা সাপেক্ষে মূল্যায়ন করুন।',
+      marking_scheme: k.marking_scheme || k.rubric || 'নম্বর বিভাজন যথাযথ'
+    });
+  });
+
+  if (exam.questions.length === 0) {
+    console.error('[normalizeExamData] Zero questions were normalized! Raw object:', raw);
+    throw new Error('No valid questions found in AI generated structure.');
+  }
+
+  console.log(`[normalizeExamData] Normalization complete. ${exam.questions.length} questions, total_marks: ${exam.total_marks}`);
+  return exam;
+}
+
+async function generateExamWithGemini() {
+  console.log('====================================================');
+  console.log('[generateExamWithGemini] Exam generation triggered at:', new Date().toISOString());
+
+  const subjectEl = document.getElementById('exam-setup-subject');
+  const durationEl = document.getElementById('exam-setup-duration');
+  const materialEl = document.getElementById('exam-setup-material');
+
+  const subject = subjectEl ? subjectEl.value : 'বাংলা';
+  const duration = parseInt(durationEl ? durationEl.value : '60', 10) || 60;
+  const material = (materialEl ? materialEl.value : '').trim();
+
+  console.log('[generateExamWithGemini] Subject:', subject, '| Duration:', duration, 'mins | Material length:', material.length);
+
+  let apiKey = getEffectiveApiKey();
+  console.log('[generateExamWithGemini] API Key lookup result:', apiKey ? (apiKey.substring(0, 6) + '...' + apiKey.substring(apiKey.length - 4)) : 'NONE FOUND');
+
+  if (!apiKey) {
+    console.warn('[generateExamWithGemini] Missing Gemini API Key! Prompting user for quick input or offline bank option...');
+    const userInput = prompt('Gemini API Key প্রয়োজন। আপনার Gemini API Key লিখুন:\n(অথবা বাতিল চাপলে অফলাইন প্রশ্ন ব্যাংক থেকে স্বয়ংক্রিয়ভাবে প্রশ্ন লোড হবে)', '');
+    if (userInput && userInput.trim()) {
+      apiKey = userInput.trim();
+      STATE.apiKey = apiKey;
+      localStorage.setItem('sma_api_key', apiKey);
+      updateExamKeyStatus();
+      showToast('🔑 API Key সংরক্ষিত হয়েছে! প্রশ্ন তৈরি হচ্ছে...', 'success');
+      console.log('[generateExamWithGemini] User entered API key on prompt. Proceeding...');
+    } else {
+      console.log('[generateExamWithGemini] User chose offline fallback. Loading offline bank for subject:', subject);
+      showToast('📂 অফলাইন প্রশ্ন ব্যাংক থেকে লিখিত পরীক্ষা লোড করা হচ্ছে...', 'warning');
+      const fallback = OFFLINE_QUESTION_BANK.find(q => q.subject === subject) || OFFLINE_QUESTION_BANK[0];
+      loadExamToHall(fallback);
+      return;
+    }
+  }
+
+  const setupCard = document.getElementById('exam-setup-card');
+  const skeletonLoader = document.getElementById('exam-skeleton-loader');
+  const loaderStatusMsg = document.getElementById('exam-loader-status-msg');
+  const hallQuestionsList = document.getElementById('hall-questions-list');
+
+  console.log('[generateExamWithGemini] Checking target DOM elements:');
+  console.log(' - setupCard:', !!setupCard);
+  console.log(' - skeletonLoader:', !!skeletonLoader);
+  console.log(' - hallQuestionsList:', !!hallQuestionsList);
+
+  if (setupCard) setupCard.style.display = 'none';
+  if (skeletonLoader) {
+    skeletonLoader.style.display = 'block';
+    if (loaderStatusMsg) {
+      loaderStatusMsg.textContent = '🌐 Google Search দিয়ে সরকারি সিলেবাস ও সাম্প্রতিক তথ্য যাচাই করা হচ্ছে...';
+    }
+  }
+
+  // Construct official grade 13-20 written exam prompts
   let subjectPrompt = '';
   if (subject === 'বাংলা') {
-    subjectPrompt = `তুমি বাংলাদেশ সরকারি চাকরির বিশেষজ্ঞ পরীক্ষক। নিচের material থেকে ১৩-২০ গ্রেডের লিখিত পরীক্ষার প্রশ্ন তৈরি করো। প্রশ্নের ধরন হবে: (১) সারাংশ বা সারমর্ম [২০ নম্বর], (২) ভাবসম্প্রসারণ [১৫ নম্বর], (৩) পত্র লেখা — দাপ্তরিক বা ব্যক্তিগত [১৫ নম্বর], (৪) ব্যাকরণ — সন্ধি বিচ্ছেদ, বিপরীত শব্দ, সমার্থক শব্দ, এককথায় প্রকাশ, বাক্য শুদ্ধি [২৫ নম্বর], (৫) রচনা বা অনুচ্ছেদ [২৫ নম্বর]। মোট ১০০ নম্বর।`;
+    subjectPrompt = `তুমি বাংলাদেশ সরকারি চাকরির নিয়োগ পরীক্ষার বিশেষজ্ঞ পরীক্ষক। ১৩-২০ গ্রেডের (অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক) লিখিত পরীক্ষার সম্পূর্ণ ১০০ নম্বরের প্রশ্ন তৈরি করো। প্রশ্নের ক্যাটাগরি: (১) ভাবসম্প্রসারণ বা সারাংশ [২০ নম্বর], (২) দাপ্তরিক বা ব্যক্তিগত পত্র/স্মারকলিপি [১৫ নম্বর], (৩) ব্যাকরণ — সন্ধি বিচ্ছেদ, বিপরীত শব্দ, সমার্থক শব্দ, এককথায় প্রকাশ, বাক্য শুদ্ধি [২৫ নম্বর], (৪) পারিভাষিক শব্দ বা অনুবাদ [১৫ নম্বর], (৫) সমকালীন সরকারি বা সামাজিক বিষয়ে অনুচ্ছেদ বা রচনা [২৫ নম্বর]। মোট ১০০ নম্বর।`;
   } else if (subject === 'ইংরেজি') {
-    subjectPrompt = `তুমি বাংলাদেশ সরকারি চাকরির বিশেষজ্ঞ পরীক্ষক। ১৩-২০ গ্রেডের লিখিত পরীক্ষার ইংরেজি প্রশ্ন তৈরি করো: (১) Fill in the blanks with appropriate words [২০ নম্বর], (২) Correct the sentences [১৫ নম্বর], (৩) Translate Bengali to English [২০ নম্বর], (৪) Write a formal letter or application [২০ নম্বর], (৫) Write a paragraph [১৫ নম্বর], (৬) Vocabulary — synonyms, antonyms [১০ নম্বর]। মোট ১০০।`;
+    subjectPrompt = `You are an expert examiner for Bangladesh Government written recruitment exams (Grade 13-20 Office Assistant cum Computer Typist). Create a full 100 marks written question paper: (1) Fill in the blanks with appropriate prepositions/articles/right forms of verbs [20 marks], (2) Correction of incorrect sentences [15 marks], (3) Translation from Bengali to English [20 marks], (4) Official application / formal office memo / joining letter [20 marks], (5) Paragraph writing on a contemporary topic [15 marks], (6) Synonyms and Antonyms [10 marks]. Total 100 marks.`;
   } else if (subject === 'গণিত') {
-    subjectPrompt = `বাংলাদেশ সরকারি চাকরি ১৩-২০ গ্রেডের গণিতের লিখিত প্রশ্ন তৈরি করো: (১) পাটিগণিত — শতকরা, লাভ-ক্ষতি, সুদকষা, অনুপাত [৩০ নম্বর], (২) বীজগণিত — সমীকরণ, উৎপাদক [৩০ নম্বর], (৩) জ্যামিতি [২০ নম্বর], (৪) সংখ্যা পদ্ধতি ও সেট [২০ নম্বর]। প্রতিটি প্রশ্নের পূর্ণ সমাধান step-by-step দেবে।`;
+    subjectPrompt = `বাংলাদেশ সরকারি চাকরির ১৩-২০ গ্রেডের লিখিত পরীক্ষার গণিত প্রশ্ন তৈরি করো: (১) পাটিগণিত — শতকরা, লাভ-ক্ষতি, সুদকষা, ঐকিক নিয়ম, অনুপাত [৩৫ নম্বর], (২) বীজগণিত — উৎপাদকে বিশ্লেষণ, ভগ্নাংশের সরল, একচলক/দ্বিচলক সমীকরণ গঠন ও সমাধান [৩৫ নম্বর], (৩) জ্যামিতি — উপপাদ্য/অনুসিদ্ধান্ত ও পরিমিতি [৩০ নম্বর]। প্রতিটি প্রশ্নের পূর্ণ সমাধান step-by-step model_answer এ প্রদান করবে।`;
   } else if (subject === 'সাধারণ জ্ঞান') {
-    subjectPrompt = `বাংলাদেশ সরকারি চাকরি ১৩-২০ গ্রেডের সাধারণ জ্ঞানের লিখিত প্রশ্ন: (১) বাংলাদেশের ইতিহাস ও মুক্তিযুদ্ধ [২৫ নম্বর], (২) বাংলাদেশের সংবিধান ও রাষ্ট্রব্যবস্থা [২০ নম্বর], (৩) আন্তর্জাতিক বিষয়াবলি [২০ নম্বর], (৪) সাম্প্রতিক ঘটনাবলি [২০ নম্বর], (৫) বিজ্ঞান ও প্রযুক্তি [১৫ নম্বর]।`;
+    subjectPrompt = `বাংলাদেশ সরকারি চাকরির ১৩-২০ গ্রেডের লিখিত পরীক্ষার সাধারণ জ্ঞান প্রশ্ন তৈরি করো: (১) বাংলাদেশ বিষয়াবলি — ভাষা আন্দোলন, মুক্তিযুদ্ধ, ঐতিহাসিক স্থান, অর্থনৈতিক সমীক্ষা ও বাজেট [৩৫ নম্বর], (২) সংবিধান ও বাংলাদেশ সরকার ব্যবস্থা [২০ নম্বর], (৩) সাম্প্রতিক জাতীয় ও আন্তর্জাতিক ঘটনাবলি [২৫ নম্বর], (৪) তথ্যপ্রযুক্তি ও সাধারণ বিজ্ঞান [২০ নম্বর]। প্রতিটি প্রশ্নের সংক্ষিপ্ত/ব্যাখ্যামূলক উত্তর তৈরি করবে।`;
   } else {
-    subjectPrompt = `বাংলাদেশ সরকারি চাকরি ১৩-২০ গ্রেডের কম্পিউটার বিষয়ক লিখিত প্রশ্ন: (১) কম্পিউটার পরিচিতি ও হার্ডওয়্যার [২০ নম্বর], (২) MS Word ও MS Excel — practical question [৩০ নম্বর], (৩) Internet ও Email [২০ নম্বর], (৪) Database ও Networking basics [১৫ নম্বর], (৫) সাইবার নিরাপত্তা [১৫ নম্বর]।`;
+    subjectPrompt = `বাংলাদেশ সরকারি চাকরির ১৩-২০ গ্রেডের অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক পদের কম্পিউটার ও আইসিটি লিখিত প্রশ্ন: (১) কম্পিউটার আর্কিটেকচার, হার্ডওয়্যার ও ইনপুট-আউটপুট ডিভাইস [২০ নম্বর], (২) MS Word, MS Excel ও কিবোর্ড শর্টকাট প্র্যাক্টিক্যাল সমস্যা সমাধান [৩৫ নম্বর], (৩) ইন্টারনেট, ইমেইল ও দাপ্তরিক নথি ব্যবস্থাপনা [২০ নম্বর], (৪) সাইবার সিকিউরিটি ও আইসিটি টার্মিনোলজি [১৫ নম্বর], (৫) বাংলা টাইপিং ও ইউনিকোড ফন্ট সংক্রান্ত ধারণা [১০ নম্বর]।`;
   }
 
   const fullPrompt = `${subjectPrompt}
-উপরের material ব্যবহার করো। JSON format এ return করো — অন্য কোনো text নয়:
+${material ? `পরীক্ষার্থীর অতিরিক্ত সিলেবাস বা টেক্সট:\n${material}\n` : 'বাংলাদেশ সরকারি নিয়োগ পরীক্ষা ও সরকারি অফিস সহকারী পদের বিগত বছরের লিখিত প্রশ্নপত্রের মান ও কাঠামোর পূর্ণ সামঞ্জস্য বজায় রাখো।'}
+
+বিশেষ সতর্কতা ও আউটপুট নির্দেশিকা:
+১. শুধুমাত্র এবং শুধুমাত্র একটি সম্পূর্ণ বৈধ ও ত্রুটিহীন JSON অবজেক্ট রিটার্ন করো।
+২. কোনো অতিরিক্ত টেক্সট, নোট, শুভেচ্ছা বা ভূমিকা লিখবে না।
+৩. প্রশ্নের মার্কস যেন সঠিকভাবে যোগ হয়ে ১০০ হয়।
+
+JSON কাঠামোর নমুনা:
 {
-  "exam_title": "${subject} — লিখিত পরীক্ষা",
+  "exam_title": "${subject} — লিখিত পরীক্ষা (১৩-২০ গ্রেড)",
   "subject": "${subject}",
   "total_marks": 100,
   "duration_minutes": ${duration},
   "questions": [
     {
       "number": 1,
-      "type": "ধরন",
-      "question": "প্রশ্নের পূর্ণ বিবরণ",
+      "type": "প্রশ্নের ধরন",
+      "question": "সম্পূর্ণ প্রশ্ন বিবরণী",
       "marks": 20,
-      "instruction": "উত্তর লেখার নির্দেশনা"
+      "instruction": "নির্দেশনা"
     }
   ],
   "answer_key": [
     {
       "number": 1,
-      "model_answer": "আদর্শ উত্তর বিস্তারিত",
+      "model_answer": "আদর্শ উত্তর",
       "marking_scheme": "নম্বর বিভাজন"
     }
   ]
-}
-Material: ${material || 'অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক পদের অফিসিয়াল সিলেবাস অনুযায়ী প্রশ্ন প্রণয়ন করো।'}`;
+}`;
 
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${STATE.model}:generateContent?key=${apiKey}`, {
+  const model = STATE.model || 'gemini-3.5-flash';
+  const endpointUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+  console.log('[generateExamWithGemini] Model:', model);
+  console.log('[generateExamWithGemini] Endpoint:', `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`);
+  console.log('[generateExamWithGemini] Full prompt characters count:', fullPrompt.length);
+
+  async function callGemini(withSearchGrounding) {
+    const payload = {
+      contents: [{ parts: [{ text: fullPrompt }] }],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 8192
+      }
+    };
+    if (withSearchGrounding) {
+      payload.tools = [{ googleSearch: {} }];
+      console.log('[generateExamWithGemini] Google Search Grounding tool enabled.');
+    }
+    console.log('[generateExamWithGemini] Dispatching fetch request (withSearchGrounding =', withSearchGrounding, ')...');
+    return await fetch(endpointUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: fullPrompt }] }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 4096,
-          responseMimeType: "application/json"
-        }
-      })
+      body: JSON.stringify(payload)
     });
+  }
+
+  try {
+    let response;
+    try {
+      response = await callGemini(true);
+      console.log('[generateExamWithGemini] Call with search grounding returned HTTP status:', response.status);
+      if (!response.ok) {
+        const errBody = await response.text();
+        console.warn('[generateExamWithGemini] Search grounding call returned error HTTP', response.status, 'Response:', errBody);
+        console.log('[generateExamWithGemini] Falling back to standard call without tools parameter...');
+        if (loaderStatusMsg) loaderStatusMsg.textContent = '🤖 Gemini AI দিয়ে লিখিত পরীক্ষার প্রশ্ন তৈরি হচ্ছে...';
+        response = await callGemini(false);
+        console.log('[generateExamWithGemini] Fallback call returned HTTP status:', response.status);
+      }
+    } catch (netErr) {
+      console.warn('[generateExamWithGemini] Network error on search grounding call:', netErr);
+      if (loaderStatusMsg) loaderStatusMsg.textContent = '🤖 Gemini AI দিয়ে লিখিত পরীক্ষার প্রশ্ন তৈরি হচ্ছে...';
+      response = await callGemini(false);
+    }
 
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
+      const errDetails = await response.text();
+      console.error('[generateExamWithGemini] Gemini API call completely failed with status:', response.status, errDetails);
+      throw new Error(`Gemini API HTTP ${response.status}: ${errDetails.slice(0, 150)}`);
     }
 
     const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    const cleanJson = rawText.replace(/```json\n?|```/g, '').trim();
-    const examData = JSON.parse(cleanJson);
+    console.log('[generateExamWithGemini] Response JSON received from Gemini:', data);
 
-    document.getElementById('exam-skeleton-loader').style.display = 'none';
+    const candidate = data.candidates && data.candidates[0];
+    if (!candidate || !candidate.content || !candidate.content.parts) {
+      console.error('[generateExamWithGemini] Invalid or missing candidate in response:', data);
+      throw new Error('Candidate content is missing in Gemini API response.');
+    }
+
+    console.log('[generateExamWithGemini] Candidate finishReason:', candidate.finishReason);
+    if (candidate.groundingMetadata) {
+      console.log('[generateExamWithGemini] Google Search Grounding Metadata:', candidate.groundingMetadata);
+    }
+
+    const fullRawText = candidate.content.parts
+      .map(p => p.text || '')
+      .filter(t => t.trim().length > 0)
+      .join('\n');
+
+    console.log('[generateExamWithGemini] Extracted text length:', fullRawText.length);
+    console.log('[generateExamWithGemini] Raw text preview (first 250 chars):\n', fullRawText.slice(0, 250));
+
+    if (loaderStatusMsg) loaderStatusMsg.textContent = '📋 প্রশ্নপত্র যাচাই ও এক্সাম হলে লোড করা হচ্ছে...';
+
+    const parsedJson = extractExamJson(fullRawText);
+    console.log('[generateExamWithGemini] JSON parse successful. Keys:', Object.keys(parsedJson || {}));
+
+    const examData = normalizeExamData(parsedJson, subject, duration);
+    console.log(`[generateExamWithGemini] Exam normalized with ${examData.questions.length} questions. Handing over to loadExamToHall...`);
+
+    if (skeletonLoader) skeletonLoader.style.display = 'none';
     loadExamToHall(examData);
     showToast('✨ Gemini AI দিয়ে সফলভাবে প্রশ্ন তৈরি হয়েছে!', 'success');
+    console.log('[generateExamWithGemini] Exam generation and hall display completed successfully.');
+
   } catch (err) {
-    console.error('Gemini error:', err);
-    document.getElementById('exam-skeleton-loader').style.display = 'none';
-    document.getElementById('exam-setup-card').style.display = 'block';
-    showToast('❌ প্রশ্ন তৈরিতে ত্রুটি হয়েছে। অফলাইন ব্যাংক থেকে দেওয়া হচ্ছে।', 'error');
-    // Fallback to offline bank
+    console.error('[generateExamWithGemini] Caught error during exam generation:', err);
+    if (skeletonLoader) skeletonLoader.style.display = 'none';
+    if (setupCard) setupCard.style.display = 'block';
+
+    showToast(`❌ AI প্রশ্ন তৈরিতে সমস্যা: ${err.message || 'পরে চেষ্টা করুন'}। অফলাইন মডেল টেস্ট লোড হচ্ছে।`, 'error');
+
+    console.log('[generateExamWithGemini] Fallback: Loading offline question bank for subject:', subject);
     const fallback = OFFLINE_QUESTION_BANK.find(q => q.subject === subject) || OFFLINE_QUESTION_BANK[0];
     loadExamToHall(fallback);
   }
 }
 
 function loadExamToHall(examData) {
+  console.log('[loadExamToHall] =====================================');
+  console.log('[loadExamToHall] Executing loadExamToHall for:', examData?.exam_title);
+
+  if (!examData || !Array.isArray(examData.questions) || examData.questions.length === 0) {
+    console.error('[loadExamToHall] Invalid examData passed:', examData);
+    showToast('❌ পরীক্ষা লোড করা সম্ভব হয়নি: কোনো প্রশ্ন পাওয়া যায়নি!', 'error');
+    return;
+  }
+
   STATE.examSession = {
     ...examData,
     timeLeftSeconds: (examData.duration_minutes || 60) * 60,
@@ -461,27 +773,77 @@ function loadExamToHall(examData) {
     timerInterval: null
   };
 
-  document.getElementById('exam-setup-container').style.display = 'none';
-  document.getElementById('exam-hall-container').style.display = 'block';
-  document.getElementById('exam-eval-container').style.display = 'none';
-
-  document.getElementById('hall-exam-title').textContent = examData.exam_title;
-  document.getElementById('hall-exam-marks').textContent = `পূর্ণমান: ${toBnNum(examData.total_marks || 100)}`;
-
+  const setupContainer = document.getElementById('exam-setup-container');
+  const hallContainer = document.getElementById('exam-hall-container');
+  const evalContainer = document.getElementById('exam-eval-container');
+  const skeletonLoader = document.getElementById('exam-skeleton-loader');
+  const setupCard = document.getElementById('exam-setup-card');
   const questionsContainer = document.getElementById('hall-questions-list');
+  const examTitleEl = document.getElementById('hall-exam-title');
+  const examMarksEl = document.getElementById('hall-exam-marks');
+
+  console.log('[loadExamToHall] Checking DOM targets:');
+  console.log(' - setupContainer:', !!setupContainer);
+  console.log(' - hallContainer:', !!hallContainer);
+  console.log(' - evalContainer:', !!evalContainer);
+  console.log(' - questionsContainer (#hall-questions-list):', !!questionsContainer);
+
+  if (skeletonLoader) skeletonLoader.style.display = 'none';
+  if (setupCard) setupCard.style.display = 'block';
+  if (setupContainer) setupContainer.style.display = 'none';
+  if (evalContainer) evalContainer.style.display = 'none';
+  if (hallContainer) {
+    hallContainer.style.display = 'block';
+    console.log('[loadExamToHall] hallContainer set to display: block');
+  }
+
+  // Ensure exam section is visibly active
+  navigateTo('exam');
+
+  if (examTitleEl) examTitleEl.textContent = examData.exam_title;
+  if (examMarksEl) examMarksEl.textContent = `পূর্ণমান: ${toBnNum(examData.total_marks || 100)}`;
+
+  if (!questionsContainer) {
+    console.error('[loadExamToHall] CRITICAL ERROR: #hall-questions-list container not found in DOM!');
+    showToast('❌ অভ্যন্তরীণ ত্রুটি: hall-questions-list খুঁজে পাওয়া যায়নি!', 'error');
+    return;
+  }
+
+  console.log(`[loadExamToHall] Rendering ${examData.questions.length} question cards into #hall-questions-list...`);
+
   questionsContainer.innerHTML = examData.questions.map(q => `
-    <div class="card" style="margin-bottom: 16px;">
-      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-        <span class="badge" style="background: var(--primary-subtle); color: var(--primary); font-size: 13px;">প্রশ্ন নং ${toBnNum(q.number)} (${q.type})</span>
-        <span style="font-weight: 700; color: var(--primary);">নম্বর: ${toBnNum(q.marks)}</span>
+    <div class="card" style="margin-bottom: 16px; border-left: 4px solid var(--primary); box-shadow: 0 4px 12px rgba(0,0,0,0.06);">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+        <span class="badge" style="background: var(--primary-subtle); color: var(--primary); font-size: 13px; font-weight: 700;">
+          প্রশ্ন নং ${toBnNum(q.number)} (${q.type})
+        </span>
+        <span style="font-weight: 700; color: var(--primary); font-size: 14px;">
+          বরাদ্দকৃত নম্বর: ${toBnNum(q.marks)}
+        </span>
       </div>
-      <div style="font-size: 13px; color: var(--muted); margin-bottom: 6px;">${q.instruction || ''}</div>
-      <div style="font-size: 15px; font-weight: 600; white-space: pre-wrap; line-height: 1.6; margin-bottom: 12px;">${q.question}</div>
-      <textarea class="form-control" placeholder="এখানে আপনার উত্তর টাইপ বা ড্রাফট করুন..." rows="4" oninput="saveDraftAnswer(${q.number}, this.value)"></textarea>
+      ${q.instruction ? `<div style="font-size: 13px; color: var(--muted); margin-bottom: 8px; font-style: italic;">📋 ${q.instruction}</div>` : ''}
+      <div style="font-size: 15px; font-weight: 600; white-space: pre-wrap; line-height: 1.6; margin-bottom: 14px; color: var(--text);">
+        ${q.question}
+      </div>
+      <label style="display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px;">
+        ✍️ আপনার লিখিত খসড়া / উত্তর টাইপ করুন:
+      </label>
+      <textarea class="form-control" 
+        data-testid="question_draft_${q.number}" 
+        placeholder="এখানে আপনার খসড়া উত্তর লিখুন (পরীক্ষার শেষে মডেল উত্তরের সাথে মিলিয়ে মূল্যায়ন করবেন)..." 
+        rows="4" 
+        oninput="saveDraftAnswer(${q.number}, this.value); updateWordCount(${q.number}, this.value)"></textarea>
+      <div id="word-count-${q.number}" style="font-size: 11px; color: var(--muted); margin-top: 4px; text-align: right;">
+        শব্দ: ০ | অক্ষর: ০
+      </div>
     </div>
   `).join('');
 
+  console.log('[loadExamToHall] DOM update complete. Rendered question cards count:', questionsContainer.querySelectorAll('.card').length);
+
   startExamTimer();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  console.log('[loadExamToHall] Exam hall setup and timer started successfully.');
 }
 
 function saveDraftAnswer(qNum, text) {
@@ -967,11 +1329,19 @@ function renderSyllabusTracker() {
 
 // Settings Module
 function renderSettings() {
-  document.getElementById('setting-name-input').value = STATE.profile.name;
-  document.getElementById('setting-post-input').value = STATE.profile.post;
-  document.getElementById('setting-date-input').value = STATE.profile.targetDate;
-  document.getElementById('setting-api-key-input').value = STATE.apiKey;
-  document.getElementById('setting-darkmode-toggle').checked = STATE.settings.darkMode;
+  const nameInput = document.getElementById('setting-name-input');
+  const postInput = document.getElementById('setting-post-input');
+  const dateInput = document.getElementById('setting-date-input');
+  const apiKeyInput = document.getElementById('setting-api-key-input');
+  const modelSelect = document.getElementById('setting-model-select');
+  const darkToggle = document.getElementById('setting-darkmode-toggle');
+
+  if (nameInput) nameInput.value = STATE.profile.name;
+  if (postInput) postInput.value = STATE.profile.post;
+  if (dateInput) dateInput.value = STATE.profile.targetDate;
+  if (apiKeyInput) apiKeyInput.value = getEffectiveApiKey();
+  if (modelSelect) modelSelect.value = STATE.model || 'gemini-3.5-flash';
+  if (darkToggle) darkToggle.checked = STATE.settings.darkMode;
 }
 
 function saveSettings() {
@@ -979,40 +1349,116 @@ function saveSettings() {
   STATE.profile.post = document.getElementById('setting-post-input').value.trim() || 'অফিস সহকারী কাম কম্পিউটার মুদ্রাক্ষরিক';
   STATE.profile.targetDate = document.getElementById('setting-date-input').value;
   STATE.apiKey = document.getElementById('setting-api-key-input').value.trim();
+  
+  const modelSelect = document.getElementById('setting-model-select');
+  if (modelSelect) {
+    STATE.model = modelSelect.value || 'gemini-3.5-flash';
+  }
+  
   STATE.settings.darkMode = document.getElementById('setting-darkmode-toggle').checked;
 
   localStorage.setItem('sma_api_key', STATE.apiKey);
+  localStorage.setItem('sma_model', STATE.model);
   saveToStorage('sma_profile', STATE.profile);
   saveToStorage('sma_settings', STATE.settings);
 
   document.body.classList.toggle('dark-mode', STATE.settings.darkMode);
   showToast('⚙️ সেটিংস সফলভাবে সংরক্ষিত হয়েছে!', 'success');
+  updateExamKeyStatus();
   renderDashboard();
 }
 
 async function testApiKey() {
-  const key = document.getElementById('setting-api-key-input').value.trim();
+  const keyInput = document.getElementById('setting-api-key-input');
+  const key = (keyInput ? keyInput.value : '').trim() || getEffectiveApiKey();
+
+  console.log('[Gemini Settings] Testing API Key (masked):', key ? (key.substring(0, 6) + '...') : 'EMPTY');
+
   if (!key) {
     showToast('⚠️ অনুগ্রহ করে API Key প্রদান করুন!', 'warning');
     return;
   }
 
-  showToast('🔍 API Key যাচাই করা হচ্ছে...', 'warning');
+  showToast('🔍 Gemini API Key যাচাই করা হচ্ছে (gemini-3.5-flash)...', 'warning');
   try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: 'Hello' }] }] })
+      body: JSON.stringify({ contents: [{ parts: [{ text: 'Hello, reply with OK' }] }] })
     });
 
+    console.log('[Gemini Settings] Test response status:', res.status);
     if (res.ok) {
       showToast('✅ Gemini API Key সম্পূর্ণ সক্রিয় ও সঠিক!', 'success');
+      STATE.apiKey = key;
+      localStorage.setItem('sma_api_key', key);
+      updateExamKeyStatus();
     } else {
-      showToast('❌ ভুল API Key অথবা কোটা শেষ!', 'error');
+      const errTxt = await res.text();
+      console.error('[Gemini Settings] Test failed status:', res.status, errTxt);
+      showToast(`❌ ভুল API Key অথবা কোটা শেষ! (${res.status})`, 'error');
     }
-  } catch {
-    showToast('❌ নেটওয়ার্ক ত্রুটি! পরে চেষ্টা করুন।', 'error');
+  } catch (err) {
+    console.error('[Gemini Settings] Test network error:', err);
+    showToast('❌ নেটওয়ার্ক ত্রুটি! ইন্টারনেট কানেকশন চেক করুন।', 'error');
   }
+}
+
+function updateExamKeyStatus() {
+  const keyBadge = document.getElementById('exam-api-status-badge');
+  const effectiveKey = getEffectiveApiKey();
+  if (keyBadge) {
+    if (effectiveKey) {
+      const masked = effectiveKey.substring(0, 6) + '...' + effectiveKey.substring(effectiveKey.length - 4);
+      keyBadge.innerHTML = `
+        <span class="badge" style="background: var(--success-subtle); color: var(--success); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px;">
+          <span>✅ Gemini AI সক্রিয় (${STATE.model || 'gemini-3.5-flash'})</span>
+          <span style="font-size: 11px; opacity: 0.85;">[${masked}]</span>
+        </span>
+        <button class="btn btn-outline btn-sm" style="padding: 2px 8px; font-size: 11px;" onclick="quickSetApiKey()">পরিবর্তন</button>
+      `;
+    } else {
+      keyBadge.innerHTML = `
+        <span class="badge" style="background: var(--warning-subtle); color: var(--warning); font-weight: 700; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 9999px;">
+          <span>⚠️ Gemini Key নেই</span>
+        </span>
+        <button class="btn btn-primary btn-sm" style="padding: 2px 8px; font-size: 11px;" onclick="quickSetApiKey()">+ কী দিন</button>
+      `;
+    }
+  }
+}
+
+function quickSetApiKey() {
+  const current = getEffectiveApiKey();
+  const input = prompt('Gemini API Key দিন (Google AI Studio থেকে প্রাপ্ত):', current || '');
+  if (input !== null) {
+    const trimmed = input.trim();
+    if (trimmed) {
+      STATE.apiKey = trimmed;
+      localStorage.setItem('sma_api_key', trimmed);
+      const inputEl = document.getElementById('setting-api-key-input');
+      if (inputEl) inputEl.value = trimmed;
+      updateExamKeyStatus();
+      showToast('✅ Gemini API Key সফলভাবে সংরক্ষিত হয়েছে!', 'success');
+      console.log('[quickSetApiKey] API Key saved via quick dialog.');
+    } else {
+      STATE.apiKey = '';
+      localStorage.removeItem('sma_api_key');
+      const inputEl = document.getElementById('setting-api-key-input');
+      if (inputEl) inputEl.value = '';
+      updateExamKeyStatus();
+      showToast('API Key মুছে ফেলা হয়েছে', 'info');
+      console.log('[quickSetApiKey] API Key removed.');
+    }
+  }
+}
+
+function updateWordCount(qNum, text) {
+  const el = document.getElementById(`word-count-${qNum}`);
+  if (!el) return;
+  const chars = (text || '').length;
+  const words = (text || '').trim().split(/\s+/).filter(w => w.length > 0).length;
+  el.textContent = `শব্দ: ${toBnNum(words)} | অক্ষর: ${toBnNum(chars)}`;
 }
 
 // Pomodoro Timer Controller (with Web Audio API / Android Bridge)

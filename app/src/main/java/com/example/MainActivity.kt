@@ -11,7 +11,10 @@ import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.ViewGroup
 import android.webkit.JavascriptInterface
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -66,6 +69,16 @@ class MainActivity : ComponentActivity() {
             toneGen?.startTone(ToneGenerator.TONE_PROP_BEEP, 200)
         } catch (_: Exception) {
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        webView?.onResume()
+    }
+
+    override fun onPause() {
+        webView?.onPause()
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -153,6 +166,20 @@ fun AppScreen(
                     }
                 }
                 webViewClient = object : WebViewClient() {
+                    override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                        android.util.Log.w("StudyMaster", "Render process gone (didCrash=${detail?.didCrash()})")
+                        return true
+                    }
+
+                    override fun onReceivedError(
+                        view: WebView?,
+                        request: WebResourceRequest?,
+                        error: WebResourceError?
+                    ) {
+                        super.onReceivedError(view, request, error)
+                        android.util.Log.w("StudyMaster", "WebView error: ${error?.description}")
+                    }
+
                     override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
                         url?.let {
                             if (it.startsWith("file:///android_asset/")) {
